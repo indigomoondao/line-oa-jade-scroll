@@ -8,9 +8,9 @@ import {
 import { config } from "@/config/config";
 import { AccessForm } from "@/app/access/access-form";
 
-type AccessPageProps = {
+type AccessPageProps = Readonly<{
   searchParams: Promise<{ error?: string }>;
-};
+}>;
 
 export default async function AccessPage({ searchParams }: AccessPageProps) {
   const cookieStore = await cookies();
