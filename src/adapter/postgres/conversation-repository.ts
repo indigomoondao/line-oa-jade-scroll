@@ -222,73 +222,79 @@ export function createPostgresConversationRepository(): ConversationRepository {
     async saveInboundMessage(
       input: SaveInboundMessageInput,
     ): Promise<Message | null> {
-      const rows = await sql`
-        WITH upserted_contact AS (
-          INSERT INTO contacts (
-            line_user_id,
-            display_name,
-            picture_url
-          )
-          VALUES (
-            ${input.externalUserId},
-            ${input.displayName},
-            ${input.pictureUrl}
-          )
-          ON CONFLICT (line_user_id)
-          DO UPDATE SET
-            display_name = EXCLUDED.display_name,
-            picture_url = EXCLUDED.picture_url,
-            updated_at = NOW()
-          RETURNING id
-        ),
-
-        inserted_message AS (
-          INSERT INTO messages (
-            contact_id,
-            line_message_id,
-            direction,
-            type,
-            content,
-            status
-          )
-          SELECT
-            id,
-            ${input.externalMessageId},
-            'inbound',
-            'text',
-            ${input.content},
-            'received'
-          FROM upserted_contact
-
-          ON CONFLICT (
-            contact_id,
-            line_message_id
-          )
-          WHERE line_message_id IS NOT NULL
-          DO NOTHING
-
-          RETURNING *
-        ),
-
-        updated_contact AS (
-          UPDATE contacts AS c
-          SET
-            last_message_id = m.id,
-            updated_at = NOW()
-          FROM inserted_message AS m
-          WHERE c.id = m.contact_id
+      const transactionResults = await sql.transaction([
+        sql`
+        INSERT INTO contacts (
+          line_user_id,
+          display_name,
+          picture_url
         )
+        VALUES (
+          ${input.externalUserId},
+          ${input.displayName},
+          ${input.pictureUrl}
+        )
+        ON CONFLICT (line_user_id)
+        DO UPDATE SET
+          display_name = COALESCE(EXCLUDED.display_name, contacts.display_name),
+          picture_url = COALESCE(EXCLUDED.picture_url, contacts.picture_url),
+          updated_at = NOW()
+        RETURNING id
+      `,
 
-        SELECT *
-        FROM inserted_message
-      `;
+        sql`
+        INSERT INTO messages (
+          contact_id,
+          line_message_id,
+          direction,
+          type,
+          content,
+          status
+        )
+        SELECT
+          id,
+          ${input.externalMessageId},
+          'inbound',
+          'text',
+          ${input.content},
+          'received'
+        FROM contacts
+        WHERE line_user_id = ${input.externalUserId}
 
-      const row = (rows as MessageRow[])[0];
+        ON CONFLICT (
+          contact_id,
+          line_message_id
+        )
+        WHERE line_message_id IS NOT NULL
+        DO NOTHING
+
+        RETURNING *
+      `,
+
+        sql`
+        UPDATE contacts AS c
+        SET
+          last_message_id = GREATEST(
+            COALESCE(c.last_message_id, 0),
+            m.id
+          ),
+          updated_at = NOW()
+        FROM messages AS m
+        WHERE c.line_user_id = ${input.externalUserId}
+          AND m.contact_id = c.id
+          AND m.line_message_id = ${input.externalMessageId}
+      `,
+      ]);
+
+      const insertedMessageRows = transactionResults[1];
+      const row = (insertedMessageRows as MessageRow[])[0];
 
       return row ? toMessage(row) : null;
     },
 
-    async saveOutboundMessage(input: SaveOutboundMessageInput): Promise<Message> {
+    async saveOutboundMessage(
+      input: SaveOutboundMessageInput,
+    ): Promise<Message> {
       const rows = await sql`
         WITH inserted_message AS (
           INSERT INTO messages (
@@ -313,7 +319,10 @@ export function createPostgresConversationRepository(): ConversationRepository {
         updated_contact AS (
           UPDATE contacts AS c
           SET
-            last_message_id = m.id,
+            last_message_id = GREATEST(
+              COALESCE(c.last_message_id, 0),
+              m.id
+            ),
             updated_at = NOW()
           FROM inserted_message AS m
           WHERE c.id = m.contact_id
