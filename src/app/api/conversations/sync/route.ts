@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { conversationUseCase } from "@/bootstrap";
+import { withAdminRoute } from "@/auth/with-admin-route";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ const cursorSchema = z
     "cursor must be a non-negative integer",
   );
 
-export async function GET(request: Request) {
+export const GET = withAdminRoute(async (request: Request) => {
   const cursorParam = new URL(request.url).searchParams.get("cursor") ?? "0";
   const parsedCursor = cursorSchema.safeParse(cursorParam);
 
@@ -41,4 +42,4 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+});
