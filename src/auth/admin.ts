@@ -6,7 +6,7 @@ import { config } from "@/config/config";
 
 export const ADMIN_SESSION_COOKIE_NAME = "jade-scroll-admin-session";
 
-const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7;
+const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 14;
 const SESSION_VERSION = "v1";
 
 export const ADMIN_SESSION_COOKIE_OPTIONS = {
