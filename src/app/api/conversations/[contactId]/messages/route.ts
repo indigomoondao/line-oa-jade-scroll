@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { conversationUseCase } from "@/bootstrap";
+import { withAdminRoute } from "@/auth/with-admin-route";
 import {
   ContactNotFoundError,
   InvalidMessageContentError,
@@ -29,7 +30,8 @@ function parseContactId(rawContactId: string) {
   return contactIdSchema.safeParse(rawContactId);
 }
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export const GET = withAdminRoute(
+  async (_request: Request, { params }: RouteContext) => {
   const { contactId: rawContactId } = await params;
   const parsedContactId = parseContactId(rawContactId);
 
@@ -56,9 +58,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
       { status: 500 },
     );
   }
-}
+  },
+);
 
-export async function POST(request: Request, { params }: RouteContext) {
+export const POST = withAdminRoute(
+  async (request: Request, { params }: RouteContext) => {
   const { contactId: rawContactId } = await params;
   const parsedContactId = parseContactId(rawContactId);
 
@@ -107,4 +111,5 @@ export async function POST(request: Request, { params }: RouteContext) {
       { status: 502 },
     );
   }
-}
+  },
+);
